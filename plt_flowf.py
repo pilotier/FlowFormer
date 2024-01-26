@@ -139,7 +139,7 @@ class CreSF():
 
 
     #Ref: https://github.com/megvii-research/CREStereo/blob/master/test.py
-    def inference(self, left, right, transf_mtx):
+    def inference(self, curr_left, curr_right, curr_transf_mtx):
 
         # rel_rot_vec = np.asarray(
         #     [-rel_rot_vec[0], -rel_rot_vec[1], rel_rot_vec[2]]
@@ -150,14 +150,14 @@ class CreSF():
 
         ### first frame condition
         if len(self.past_rgb_frames) < self.frame_history_length:
-            depth, disparity = self.infer_depth(left, right)
+            depth, disparity = self.infer_depth(curr_left, curr_right)
             curr_xyz = self.compute_xyz_from_depth(depth)
 
-            self.past_rgb_frames.append(left)
+            self.past_rgb_frames.append(curr_left)
             self.past_xyz_frames.append(curr_xyz)
-            self.past_transf_mtxs.append(transf_mtx)
+            self.past_transf_mtxs.append(curr_transf_mtx)
 
-            sceneflow = np.zeros_like(left, dtype=np.float32)
+            sceneflow = np.zeros_like(curr_left, dtype=np.float32)
             flow = np.zeros((self.h, self.w, 2), dtype=np.float32) + 5.0
             disparity = np.zeros((self.h, self.w), dtype=np.float32)
             depth = np.zeros((self.h, self.w), dtype=np.float32)
@@ -166,21 +166,22 @@ class CreSF():
             return sceneflow, vis, flow, vis, disparity, depth, vis, flow, vis, flow, vis,
                     
         else:
-            ### update rgb and transf memory 
-            self.past_transf_mtxs.append(transf_mtx)
+            ### update rgb and transf mtx memory 
+            self.past_transf_mtxs.append(curr_transf_mtx)
             self.past_transf_mtxs.pop(0)
-            self.past_rgb_frames.append(left)
+            self.past_rgb_frames.append(curr_left)
             self.past_rgb_frames.pop(0)
             
-            ### and get the combined transf mtx
-            acc_transf_mtx = main_utils.get_combined_transf_mtxs(self.past_transf_mtxs)
-            rotaion_mtx = acc_transf_mtx[:3, :3]
-            rotation_vec = R.from_matrix(rotaion_mtx).as_rotvec()
-            translation_vec = acc_transf_mtx[:3, 3]
+            ### get the combined transf mtx
+            combined_transf_mtx = main_utils.get_combined_transf_mtxs(self.past_transf_mtxs)
+            combined_rotaion_mtx = combined_transf_mtx[:3, :3]
+            combined_rotation_vec = R.from_matrix(combined_rotaion_mtx).as_rotvec()
+            combined_translation_vec = combined_transf_mtx[:3, 3]
 
             ### compute flow and depth
             flow = self.infer_flow_self(self.past_rgb_frames[0], self.past_rgb_frames[-1])
-            depth, disparity = self.infer_depth(left, right)
+            # flow = flow * -1
+            depth, disparity = self.infer_depth(curr_left, curr_right)
             curr_xyz = self.compute_xyz_from_depth(depth)
 
             ### update point cloud memory
@@ -191,11 +192,11 @@ class CreSF():
             linspace_w = np.linspace(0, int(self.w) - 1, int(self.w))
             linspace_h = np.linspace(0, int(self.h) - 1, int(self.h))
             grids = np.meshgrid(linspace_w, linspace_h)
-            # ic(grids)
             grid_mesh = np.dstack((grids[0], grids[1]))
 
-            # map = np.zeros_like(flow)
-            # map[index_flow[:,:,:1], index_flow[:,:,:0]] = grid_mesh
+            ###
+
+
             # ic(grid_mesh.shape)
 
             index_flow = (grid_mesh + flow).astype(np.int32)
@@ -205,16 +206,33 @@ class CreSF():
             # ic(self.prev_xyz.shape)
             # ic(curr_xyz.shape)
 
+            ##extra satya code
+            # map = np.zeros_like(flow)
+            # map[index_flow[:,:,1], index_flow[:,:,0]] = grid_mesh
+            # occ = (map == 0)
+            # valid = ~occ
+            # valid = np.repeat(valid[:,:,0][:, :, np.newaxis], 3, axis = 2)
+            # occ = np.repeat(occ[:,:,0][:, :, np.newaxis], 3, axis = 2)
+
+
             ### compute dynamic flow
             # transformation_mtx = main_utils.get_total_transformation_torch(self.past_transf_mtxs[0], curr_trannsf_mtx)
-            dynamic_flow, induced_flow = self.compute_dynamic_flow(flow, depth, rotation_vec, translation_vec)
+            dynamic_flow, induced_flow = self.compute_dynamic_flow(flow, 
+                                                                   depth, 
+                                                                   combined_rotation_vec, 
+                                                                   combined_translation_vec)
             dynamic_flow_mag = np.sqrt(np.power(dynamic_flow[:, :, 0], 2) + np.power(dynamic_flow[:, :, 1], 2))
-            ########################
+            
 
             ### compute sceneflow
-            sceneflow =  curr_xyz[index_flow[:,:,1], index_flow[:,:,0]] - self.past_xyz_frames[-1]
+            sceneflow =  curr_xyz - self.past_xyz_frames[0][index_flow[:,:,1], index_flow[:,:,0]]
             sceneflow[disparity < 1.0] = [0.0, 0.0, 0.0]
-            sceneflow[dynamic_flow_mag < 3.0] = [0.0, 0.0, 0.0]
+            sceneflow[depth > 35.0] = [0.0, 0.0, 0.0]
+            sceneflow[dynamic_flow_mag < 2.5] = [0.0, 0.0, 0.0]
+
+            ##extra code
+            # sceneflow =  curr_xyz[valid] - self.past_xyz_frames[0][index_flow[:,:,1], index_flow[:,:,0]][valid]
+
 
             ### visualize
             ###########################
