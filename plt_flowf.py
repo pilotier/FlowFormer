@@ -139,7 +139,7 @@ class CreSF():
 
 
     #Ref: https://github.com/megvii-research/CREStereo/blob/master/test.py
-    def inference(self, left, right, transf_mtx):
+    def inference(self, left, right, transf_mtx, cre_depth):
 
         # rel_rot_vec = np.asarray(
         #     [-rel_rot_vec[0], -rel_rot_vec[1], rel_rot_vec[2]]
@@ -181,7 +181,13 @@ class CreSF():
             ### compute flow and depth
             flow = self.infer_flow_self(self.past_rgb_frames[0], self.past_rgb_frames[-1])
             depth, disparity = self.infer_depth(left, right)
-            curr_xyz = self.compute_xyz_from_depth(depth)
+
+            # ic(depth.shape)
+            # ic(cre_depth.shape)
+
+            # curr_xyz = self.compute_xyz_from_depth(depth)
+            curr_xyz = self.compute_xyz_from_depth(cre_depth) # for cre depth
+
 
             ### update point cloud memory
             self.past_xyz_frames.append(curr_xyz)
@@ -213,7 +219,7 @@ class CreSF():
 
             ### compute sceneflow
             sceneflow =  curr_xyz[index_flow[:,:,1], index_flow[:,:,0]] - self.past_xyz_frames[-1]
-            sceneflow[disparity < 1.0] = [0.0, 0.0, 0.0]
+            sceneflow[disparity < 1.] = [0.0, 0.0, 0.0]
             sceneflow[dynamic_flow_mag < 3.0] = [0.0, 0.0, 0.0]
 
             ### visualize
