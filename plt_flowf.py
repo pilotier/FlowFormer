@@ -3,20 +3,19 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from icecream import ic
-from pylotier.utils.timer import Timer
-from pylotier.utils import main_utils
-import torchvision
-import pylotier.utils.flow_viz as flow_viz
+
 from src.deepLearning.FlowFormer.core.FlowFormer import build_flowformer
 from src.deepLearning.FlowFormer.configs.submission import get_cfg
 from src.deepLearning.FlowFormer.core.utils.flow_viz import  flow_to_image
+from src.deepLearning.FlowFormer.configs.submission import get_cfg
 import src.modules.foot_columns.column_helpers as ch 
 import src.modules.foot_columns.column_kernels as ck 
 
-from icecream import ic
+from pylotier.utils.timer import Timer  
+from pylotier.utils import main_utils
+import pylotier.utils.flow_viz as flow_viz
 from pylotier.utils.depth_visualizer_torch import visualize_depth
 from pylotier.utils.flow_viz import tau_to_vis
-from src.deepLearning.FlowFormer.configs.submission import get_cfg
 from scipy.spatial.transform import Rotation as R
 import cv2
 
@@ -33,7 +32,7 @@ class CreSF():
                  cy,
                  baseline,
                  device="cuda",
-                 frame_distance=2):
+                 frame_distance=3):
 
         ### initialize constants
         # self.prev_xyz = None
@@ -138,8 +137,18 @@ class CreSF():
     #         return pred_flow
 
 
+    def return_zeros(self, curr_left, curr_right, curr_transf_mtx):
+
+        sceneflow = np.zeros_like(curr_left, dtype=np.float32)
+        flow = np.zeros((self.h, self.w, 2), dtype=np.float32) + 5.0
+        disparity = np.zeros((self.h, self.w), dtype=np.float32)
+        depth = np.zeros((self.h, self.w), dtype=np.float32)
+        vis = np.zeros((self.h, self.w, 3), dtype=np.uint8)
+
+        return sceneflow, vis, flow, vis, disparity, depth, vis, flow, vis, flow, vis, sceneflow, vis, sceneflow, vis,
+
     #Ref: https://github.com/megvii-research/CREStereo/blob/master/test.py
-    def inference(self, curr_left, curr_right, curr_transf_mtx):
+    def inference(self, curr_left, curr_right, curr_transf_mtx, cre_depth = None, cre_disparity=None):
 
         # rel_rot_vec = np.asarray(
         #     [-rel_rot_vec[0], -rel_rot_vec[1], rel_rot_vec[2]]
@@ -150,7 +159,10 @@ class CreSF():
 
         ### first frame condition
         if len(self.past_rgb_frames) < self.frame_history_length:
-            depth, disparity = self.infer_depth(curr_left, curr_right)
+            if cre_depth is not None:
+                depth, disparity = cre_depth, cre_disparity
+            else:
+                depth, disparity = self.infer_depth(curr_left, curr_right)
             curr_xyz = self.compute_xyz_from_depth(depth)
 
             self.past_rgb_frames.append(curr_left)
@@ -163,7 +175,7 @@ class CreSF():
             depth = np.zeros((self.h, self.w), dtype=np.float32)
             vis = np.zeros((self.h, self.w, 3), dtype=np.uint8)
 
-            return sceneflow, vis, flow, vis, disparity, depth, vis, flow, vis, flow, vis,
+            return sceneflow, vis, flow, vis, disparity, depth, vis, flow, vis, flow, vis, sceneflow, vis, sceneflow, vis,
                     
         else:
             ### update rgb and transf mtx memory 
@@ -181,7 +193,10 @@ class CreSF():
             ### compute flow and depth
             flow = self.infer_flow_self(self.past_rgb_frames[0], self.past_rgb_frames[-1])
             # flow = flow * -1
-            depth, disparity = self.infer_depth(curr_left, curr_right)
+            if cre_depth is not None:
+                depth, disparity = cre_depth, cre_disparity
+            else:
+                depth, disparity = self.infer_depth(curr_left, curr_right)
             curr_xyz = self.compute_xyz_from_depth(depth)
 
             ### update point cloud memory
@@ -217,18 +232,22 @@ class CreSF():
 
             ### compute dynamic flow
             # transformation_mtx = main_utils.get_total_transformation_torch(self.past_transf_mtxs[0], curr_trannsf_mtx)
-            dynamic_flow, induced_flow = self.compute_dynamic_flow(flow, 
+            dynamic_flow, induced_flow, induced_sceneflow = self.compute_dynamic_flow(flow, 
                                                                    depth, 
                                                                    combined_rotation_vec, 
                                                                    combined_translation_vec)
+            
             dynamic_flow_mag = np.sqrt(np.power(dynamic_flow[:, :, 0], 2) + np.power(dynamic_flow[:, :, 1], 2))
             
 
             ### compute sceneflow
             sceneflow =  curr_xyz - self.past_xyz_frames[0][index_flow[:,:,1], index_flow[:,:,0]]
-            sceneflow[disparity < 1.0] = [0.0, 0.0, 0.0]
-            sceneflow[depth > 35.0] = [0.0, 0.0, 0.0]
+            # sceneflow[disparity < 1.0] = [0.0, 0.0, 0.0]
+            sceneflow[depth > 40.0] = [0.0, 0.0, 0.0]
             sceneflow[dynamic_flow_mag < 2.5] = [0.0, 0.0, 0.0]
+            induced_sceneflow[depth > 30] = [0.0, 0.0, 0.0]
+
+            final_sceneflow = sceneflow - induced_sceneflow
 
             ##extra code
             # sceneflow =  curr_xyz[valid] - self.past_xyz_frames[0][index_flow[:,:,1], index_flow[:,:,0]][valid]
@@ -239,7 +258,9 @@ class CreSF():
             # flow_vis = flow_to_image(flow)
             flow_vis = flow_viz.flow_to_image_clip(flow)
             depth_vis = visualize_depth(torch.from_numpy(depth).to(self.device), max_depth=100).cpu().numpy()
-            sceneflow_vis = tau_to_vis(sceneflow, min_max=10.0)
+            sceneflow_vis = tau_to_vis(sceneflow, min_max=7.0)
+            induced_sceneflow_vis = tau_to_vis(induced_sceneflow, min_max=7.0)
+            final_sceneflow_vis = tau_to_vis(final_sceneflow, min_max=7.0)
             # ic(left.dtype)
             # ic(depth_vis.dtype)
             # ic(flow_vis.dtype)
@@ -273,7 +294,11 @@ class CreSF():
                     induced_flow,
                     induced_flow_vis,
                     dynamic_flow,
-                    dynamic_flow_vis
+                    dynamic_flow_vis,
+                    induced_sceneflow,
+                    induced_sceneflow_vis,
+                    final_sceneflow,
+                    final_sceneflow_vis
                     )
 
 
@@ -300,7 +325,7 @@ class CreSF():
 
     def compute_dynamic_flow(self, np_flow, depth, rel_rot_vec, rel_transl_vec):
         ### Computing dynamic flow
-        np_induced_flow = ck.run_generate_induced_flow_img(depth,
+        np_induced_flow, np_induced_sceneflow = ck.run_generate_induced_flow_img(depth,
                                                                 self.h,
                                                                 self.w,
                                                                 self.fx,
@@ -318,4 +343,4 @@ class CreSF():
         np_dynamic_flow = np_flow - np_induced_flow
         # ic(np_flow.shape)
 
-        return np_dynamic_flow, np_induced_flow
+        return np_dynamic_flow, np_induced_flow, np_induced_sceneflow
