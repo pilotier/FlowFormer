@@ -32,7 +32,7 @@ class CreSF():
                  cy,
                  baseline,
                  device="cuda",
-                 frame_distance=1):
+                 frame_distance=3):
 
         ### initialize constants
         # self.prev_xyz = None
@@ -301,6 +301,8 @@ class CreSF():
     #                 final_sceneflow_vis
     #                 )
 
+
+    
     #Ref: https://github.com/megvii-research/CREStereo/blob/master/test.py
     def inference(self, curr_left, curr_right, curr_transf_mtx, cre_depth = None, cre_disparity=None, of=None):
 
@@ -339,8 +341,8 @@ class CreSF():
             self.past_rgb_frames.pop(0)
             
             ### get the combined transf mtx
-            # combined_transf_mtx = main_utils.get_combined_transf_mtxs(self.past_transf_mtxs, forward=False)
-            combined_transf_mtx = self.past_transf_mtxs[-1]
+            combined_transf_mtx = main_utils.get_combined_transf_mtxs(self.past_transf_mtxs, forward=False)
+            # combined_transf_mtx = self.past_transf_mtxs[-1]
             combined_rotaion_mtx = combined_transf_mtx[:3, :3]
             combined_rotation_vec = R.from_matrix(combined_rotaion_mtx).as_rotvec()
             combined_translation_vec = combined_transf_mtx[:3, 3]
@@ -351,8 +353,8 @@ class CreSF():
             else:   
                 # ic(len(self.past_rgb_frames))
                 flow =  - self.infer_flow_self(self.past_rgb_frames[0], self.past_rgb_frames[-1])
-                cv2.imshow("0", self.past_rgb_frames[0])
-                cv2.imshow("-1", self.past_rgb_frames[-1])
+                # cv2.imshow("0", self.past_rgb_frames[0])
+                # cv2.imshow("-1", self.past_rgb_frames[-1])
 
             # flow = flow * -1
             if cre_depth is not None:
@@ -387,7 +389,7 @@ class CreSF():
             occlusion_mask = np.full((self.h, self.w), fill_value=0, dtype=np.int32)
             occlusion_mask[index_flow_2[:,:,1], index_flow_2[:,:,0]] = 255
             # occlusion_mask_2 = occlusion_mask < 0.0
-            cv2.imshow("occlusion_mask", occlusion_mask.astype(np.uint8))
+            # cv2.imshow("occlusion_mask", occlusion_mask.astype(np.uint8))
             # ic(index_flow.shape)
 
 
@@ -432,7 +434,7 @@ class CreSF():
 
             df_mask = np.zeros((self.h, self.w, 3), dtype=np.uint8)
             df_mask[dynamic_flow_mag > 3.5] = [255, 255, 255]
-            cv2.imshow("df_mask", df_mask)
+            # cv2.imshow("df_mask", df_mask)
 
             ##extra code
             # sceneflow =  curr_xyz[valid] - self.past_xyz_frames[0][index_flow[:,:,1], index_flow[:,:,0]][valid]
