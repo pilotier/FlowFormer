@@ -31,6 +31,7 @@ class CreSF():
                  cx,
                  cy,
                  baseline,
+                 fps,
                  device="cuda",
                  frame_distance=3):
 
@@ -46,6 +47,7 @@ class CreSF():
         self.device = device
         self.n_iter = n_iter
         self.baseline = baseline
+        self.original_fps = fps
 
         cfg = get_cfg()
         self.model = torch.nn.DataParallel(build_flowformer(cfg))
@@ -471,6 +473,14 @@ class CreSF():
 
 
             # ic(np.max(dynamic_flow))
+
+            ### convert all SF to m/s
+
+
+            sceneflow *= self.original_fps
+            induced_sceneflow *= self.original_fps
+            final_sceneflow *= self.original_fps
+
 
             return (sceneflow, 
                     sceneflow_vis, 
