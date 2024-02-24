@@ -48,7 +48,7 @@ _CN.latentcostformer.use_mlp = False
 _CN.latentcostformer.vertical_conv = False
 
 # decoder
-_CN.latentcostformer.decoder_depth = 32
+_CN.latentcostformer.decoder_depth = 16
 _CN.latentcostformer.critical_params = ['cost_heads_num', 'vert_c_dim', 'cnet', 'pretrain' , 'add_flow_token', 'encoder_depth', 'gma', 'cost_encoder_res']
 
 ### TRAINER

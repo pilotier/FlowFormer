@@ -32,7 +32,7 @@ class CreSF():
                  cy,
                  baseline,
                  fps,
-                 device="cuda",
+                 device=None,
                  frame_distance=3):
 
         ### initialize constants
@@ -48,13 +48,15 @@ class CreSF():
         self.n_iter = n_iter
         self.baseline = baseline
         self.original_fps = fps
+        ic("+++++++++++++++++++++++++++++flow device+++++++++++++++++++++++++++++++",self.device)
 
         cfg = get_cfg()
-        self.model = torch.nn.DataParallel(build_flowformer(cfg))
+        # self.model = torch.nn.DataParallel(build_flowformer(cfg))
+        self.model = build_flowformer(cfg)
 
         #### load weights
         checkpoint = torch.load(model_path, map_location=self.device)
-        self.model.load_state_dict(checkpoint)
+        self.model.load_state_dict(checkpoint, strict=False)
         
         #### send model to the GPU
         self.model.to(self.device)
@@ -78,18 +80,18 @@ class CreSF():
         imgL = torch.tensor(imgL.astype("float32")).to(self.device)
         imgR = torch.tensor(imgR.astype("float32")).to(self.device)
 
-        imgL_dw2 = F.interpolate(
-            imgL,
-            size=(imgL.shape[2] // 2, imgL.shape[3] // 2),
-            mode="bilinear",
-            align_corners=True,
-        )
-        imgR_dw2 = F.interpolate(
-            imgR,
-            size=(imgL.shape[2] // 2, imgL.shape[3] // 2),
-            mode="bilinear",
-            align_corners=True,
-        )
+        # imgL_dw2 = F.interpolate(
+        #     imgL,
+        #     size=(imgL.shape[2] // 2, imgL.shape[3] // 2),
+        #     mode="bilinear",
+        #     align_corners=True,
+        # )
+        # imgR_dw2 = F.interpolate(
+        #     imgR,
+        #     size=(imgL.shape[2] // 2, imgL.shape[3] // 2),
+        #     mode="bilinear",
+        #     align_corners=True,
+        # )
         # print(imgR_dw2.shape)
         with torch.inference_mode():
             # pred_flow_dw2 = model(imgL_dw2, imgR_dw2, iters=n_iter, flow_init=None)
@@ -447,7 +449,8 @@ class CreSF():
             ###########################
             # flow_vis = flow_to_image(flow)
             flow_vis = flow_viz.flow_to_image_clip(flow)
-            depth_vis = visualize_depth(torch.from_numpy(depth).to(self.device), max_depth=100).cpu().numpy()
+            # depth_vis = visualize_depth(torch.from_numpy(depth).to(self.device), max_depth=100).cpu().numpy()
+            depth_vis = torch.dstack([torch.from_numpy(depth), torch.from_numpy(depth),torch.from_numpy(depth)])
             sceneflow_vis = tau_to_vis(sceneflow, min_max=2.0)
             induced_sceneflow_vis = tau_to_vis(induced_sceneflow, min_max=2.0)
             final_sceneflow_vis = tau_to_vis(final_sceneflow, min_max=2.0)
