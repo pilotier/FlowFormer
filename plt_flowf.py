@@ -354,7 +354,7 @@ class CreSF():
                 flow = of
             else:   
                 # ic(len(self.past_rgb_frames))
-                flow =  - self.infer_flow_self(self.past_rgb_frames[0], self.past_rgb_frames[-1])
+                flow =  - self.infer_flow_self(self.past_rgb_frames[0], self.past_rgb_frames[-1]) 
                 # cv2.imshow("0", self.past_rgb_frames[0])
                 # cv2.imshow("-1", self.past_rgb_frames[-1])
 
@@ -420,13 +420,18 @@ class CreSF():
 
             ### compute sceneflow
             sceneflow =  curr_xyz - self.past_xyz_frames[0][index_flow[:,:,1], index_flow[:,:,0]]
-            final_sceneflow = sceneflow - induced_sceneflow
+            final_sceneflow = sceneflow - (induced_sceneflow)
 
             invalid = depth > 40.0
             sceneflow[invalid] = [0.0, 0.0, 0.0]
             induced_sceneflow[invalid] = [0.0, 0.0, 0.0]
             final_sceneflow[invalid] = [0.0, 0.0, 0.0]
             final_sceneflow[dynamic_flow_mag < 3.5] = [0.0, 0.0, 0.0]
+
+            invalid_mask = np.zeros_like(depth)
+            invalid_mask[np.abs(depth - cv2.blur(depth, (15, 15))) > 1.0] = 1.0
+            cv2.imshow("invalid_mask", (invalid_mask * 255).astype(np.uint8))
+            final_sceneflow[invalid_mask > 0.0] = [0, 0, 0]
 
             # sceneflow[disparity < 1.0] = [0.0, 0.0, 0.0]
             # sceneflow[depth > 40.0] = [0.0, 0.0, 0.0]
